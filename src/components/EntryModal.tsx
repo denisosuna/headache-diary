@@ -6,7 +6,14 @@ import type {
   TipoDolor,
   Zona,
 } from '../types';
-import { DESENCADENANTES, INTENSIDAD_META, TIPOS_DOLOR, ZONAS } from '../types';
+import {
+  DESENCADENANTES,
+  INTENSIDAD_META,
+  TIPOS_DOLOR,
+  TIPOS_DOLOR_DESC,
+  ZONAS,
+  ZONAS_DESC,
+} from '../types';
 import { formatLargo } from '../utils/date';
 
 interface Props {
@@ -126,12 +133,22 @@ export function EntryModal({ date, existing, onClose, onSave, onDelete }: Props)
             </div>
           </Field>
 
-          <Field label="Tipo de dolor">
-            <Select value={tipo} onChange={(v) => setTipo(v as TipoDolor)} options={TIPOS_DOLOR} />
+          <Field label="Tipo de dolor" hint={TIPOS_DOLOR_DESC[tipo]}>
+            <Select
+              value={tipo}
+              onChange={(v) => setTipo(v as TipoDolor)}
+              options={TIPOS_DOLOR}
+              descriptions={TIPOS_DOLOR_DESC}
+            />
           </Field>
 
-          <Field label="Zona">
-            <Select value={zona} onChange={(v) => setZona(v as Zona)} options={ZONAS} />
+          <Field label="Zona" hint={ZONAS_DESC[zona]}>
+            <Select
+              value={zona}
+              onChange={(v) => setZona(v as Zona)}
+              options={ZONAS}
+              descriptions={ZONAS_DESC}
+            />
           </Field>
 
           <Field label="Desencadenantes">
@@ -205,11 +222,20 @@ export function EntryModal({ date, existing, onClose, onSave, onDelete }: Props)
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
   return (
     <div>
       <label className="mb-1.5 block text-sm font-medium text-slate-700">{label}</label>
       {children}
+      {hint && <p className="mt-1.5 text-xs leading-snug text-slate-500">{hint}</p>}
     </div>
   );
 }
@@ -218,10 +244,12 @@ function Select({
   value,
   onChange,
   options,
+  descriptions,
 }: {
   value: string;
   onChange: (v: string) => void;
   options: readonly string[];
+  descriptions?: Record<string, string>;
 }) {
   return (
     <div className="relative">
@@ -232,7 +260,7 @@ function Select({
       >
         {options.map((o) => (
           <option key={o} value={o}>
-            {o}
+            {descriptions?.[o] ? `${o} — ${descriptions[o]}` : o}
           </option>
         ))}
       </select>
