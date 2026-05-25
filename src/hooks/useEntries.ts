@@ -11,7 +11,12 @@ function readLocal(): HeadacheEntry[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
-    return JSON.parse(raw) as HeadacheEntry[];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      localStorage.removeItem(STORAGE_KEY);
+      return [];
+    }
+    return parsed as HeadacheEntry[];
   } catch {
     return [];
   }
