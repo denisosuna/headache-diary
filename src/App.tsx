@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Calendar } from './components/Calendar';
 import { EntryList } from './components/EntryList';
 import { EntryModal } from './components/EntryModal';
+import { UpdateBanner } from './components/UpdateBanner';
 import { useEntries } from './hooks/useEntries';
 import { downloadCSV, entriesToCSV } from './utils/csv';
 import { MESES, parseISODate } from './utils/date';
@@ -12,7 +13,8 @@ export default function App() {
   const [month, setMonth] = useState(today.getMonth()); // 0-11
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
-  const { entries, loading, error, saveEntry, deleteEntry, backend } = useEntries();
+  const { entries, loading, error, saveEntry, deleteEntry, backend, online, pendingCount } =
+    useEntries();
 
   function shiftMonth(delta: number) {
     const d = new Date(year, month + delta, 1);
@@ -68,7 +70,7 @@ export default function App() {
       <main className="mx-auto max-w-3xl space-y-6 px-4 py-6 sm:px-6">
         {error && (
           <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            No se pudo sincronizar con Supabase ({error}). Usando almacenamiento local.
+            {error}
           </div>
         )}
 
@@ -93,6 +95,22 @@ export default function App() {
           <span className="font-medium text-slate-500">
             {backend === 'supabase' ? 'Supabase' : 'localStorage'}
           </span>
+          {backend === 'supabase' && (
+            <>
+              {' · '}
+              <span className={online ? 'text-emerald-600' : 'text-amber-600'}>
+                {online ? 'En línea' : 'Sin conexión'}
+              </span>
+              {pendingCount > 0 && (
+                <>
+                  {' · '}
+                  <span className="text-amber-600">
+                    {pendingCount} cambio{pendingCount === 1 ? '' : 's'} por sincronizar
+                  </span>
+                </>
+              )}
+            </>
+          )}
         </footer>
       </main>
 
@@ -105,6 +123,8 @@ export default function App() {
           onDelete={deleteEntry}
         />
       )}
+
+      <UpdateBanner />
     </div>
   );
 }

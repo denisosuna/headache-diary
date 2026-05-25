@@ -3,6 +3,7 @@
 App web minimalista para registrar episodios de cefalea y detectar patrones.
 React 18 + TypeScript + Vite + Tailwind. Persistencia en **Supabase** (con
 fallback automático a `localStorage` si no hay credenciales configuradas).
+Funciona como **PWA instalable y offline-first**.
 
 ## Características
 
@@ -13,6 +14,10 @@ fallback automático a `localStorage` si no hay credenciales configuradas).
   multi-select) y notas libres. Guardar / Eliminar / Cancelar.
 - Lista de entradas del mes actual ordenadas por fecha descendente.
 - Exportación de todas las entradas a CSV.
+- **PWA**: instalable en móvil/escritorio, funciona sin conexión y se
+  autoactualiza al detectar una nueva versión.
+- **Offline + sync**: las entradas se guardan localmente al instante y, si la
+  red falla, se encolan y se envían a Supabase cuando vuelve la conexión.
 - Diseño limpio, mobile-first, en español, semana empezando en lunes.
 
 ## Estructura

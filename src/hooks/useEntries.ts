@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { HeadacheEntry } from '../types';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { enqueue, flushQueue, getPendingCount } from '../lib/syncQueue';
 
 const STORAGE_KEY = 'diario-cefaleas:entries';
 const TABLE = 'headache_entries';
@@ -26,80 +27,100 @@ export interface UseEntries {
   saveEntry: (entry: HeadacheEntry) => Promise<void>;
   deleteEntry: (date: string) => Promise<void>;
   backend: 'supabase' | 'localStorage';
+  online: boolean;
+  pendingCount: number;
 }
 
 export function useEntries(): UseEntries {
-  const [entries, setEntries] = useState<Record<string, HeadacheEntry>>({});
-  const [loading, setLoading] = useState(true);
+  // Mirror local: render inmediato y soporte offline incluso con Supabase activo.
+  const [entries, setEntries] = useState<Record<string, HeadacheEntry>>(() => readLocal());
+  const [loading, setLoading] = useState(isSupabaseConfigured);
   const [error, setError] = useState<string | null>(null);
+  const [online, setOnline] = useState(
+    typeof navigator === 'undefined' ? true : navigator.onLine
+  );
+  const [pendingCount, setPendingCount] = useState(() => getPendingCount());
 
   const backend: 'supabase' | 'localStorage' = isSupabaseConfigured
     ? 'supabase'
     : 'localStorage';
 
-  // Carga inicial
+  // Persiste el mirror cada vez que cambien las entradas.
   useEffect(() => {
-    let cancelled = false;
+    writeLocal(entries);
+  }, [entries]);
 
-    async function load() {
-      setLoading(true);
-      setError(null);
-      try {
-        if (supabase) {
-          const { data, error: err } = await supabase
-            .from(TABLE)
-            .select('*')
-            .order('date', { ascending: false });
-          if (err) throw err;
-          const map: Record<string, HeadacheEntry> = {};
-          for (const row of data ?? []) {
-            map[row.date] = {
-              date: row.date,
-              intensidad: row.intensidad,
-              tipo: row.tipo,
-              zona: row.zona,
-              desencadenantes: row.desencadenantes ?? [],
-              notas: row.notas ?? '',
-            };
-          }
-          if (!cancelled) setEntries(map);
-        } else {
-          if (!cancelled) setEntries(readLocal());
-        }
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : 'Error desconocido';
-        if (!cancelled) {
-          setError(msg);
-          // Fallback a local si Supabase falla en runtime
-          setEntries(readLocal());
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
+  const syncWithServer = useCallback(async () => {
+    if (!supabase) return;
+    try {
+      const remaining = await flushQueue();
+      setPendingCount(remaining);
+      const { data, error: err } = await supabase
+        .from(TABLE)
+        .select('*')
+        .order('date', { ascending: false });
+      if (err) throw err;
+      const map: Record<string, HeadacheEntry> = {};
+      for (const row of data ?? []) {
+        map[row.date] = {
+          date: row.date,
+          intensidad: row.intensidad,
+          tipo: row.tipo,
+          zona: row.zona,
+          desencadenantes: row.desencadenantes ?? [],
+          notas: row.notas ?? '',
+        };
       }
+      setEntries(map);
+      setError(null);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Error desconocido';
+      setError(msg);
     }
-
-    load();
-    return () => {
-      cancelled = true;
-    };
   }, []);
+
+  // Carga inicial: si hay Supabase, intenta sincronizar; si no, ya tenemos local.
+  useEffect(() => {
+    if (!supabase) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    syncWithServer().finally(() => setLoading(false));
+  }, [syncWithServer]);
+
+  // Online/offline + focus → reintenta sincronización.
+  useEffect(() => {
+    function handleOnline() {
+      setOnline(true);
+      if (supabase) syncWithServer();
+    }
+    function handleOffline() {
+      setOnline(false);
+    }
+    function handleFocus() {
+      setPendingCount(getPendingCount());
+      if (supabase && navigator.onLine) syncWithServer();
+    }
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [syncWithServer]);
 
   const saveEntry = useCallback(async (entry: HeadacheEntry) => {
     setError(null);
-    // Optimistic update
-    setEntries((prev) => {
-      const next = { ...prev, [entry.date]: entry };
-      if (!supabase) writeLocal(next);
-      return next;
-    });
-    if (supabase) {
-      const { error: err } = await supabase
-        .from(TABLE)
-        .upsert(entry, { onConflict: 'date' });
-      if (err) {
-        setError(err.message);
-        throw err;
-      }
+    setEntries((prev) => ({ ...prev, [entry.date]: entry }));
+    if (!supabase) return;
+    enqueue({ kind: 'upsert', entry });
+    const remaining = await flushQueue();
+    setPendingCount(remaining);
+    if (remaining > 0) {
+      setError('Sin conexión: se sincronizará cuando vuelva la red.');
     }
   }, []);
 
@@ -108,17 +129,25 @@ export function useEntries(): UseEntries {
     setEntries((prev) => {
       const next = { ...prev };
       delete next[date];
-      if (!supabase) writeLocal(next);
       return next;
     });
-    if (supabase) {
-      const { error: err } = await supabase.from(TABLE).delete().eq('date', date);
-      if (err) {
-        setError(err.message);
-        throw err;
-      }
+    if (!supabase) return;
+    enqueue({ kind: 'delete', date });
+    const remaining = await flushQueue();
+    setPendingCount(remaining);
+    if (remaining > 0) {
+      setError('Sin conexión: se sincronizará cuando vuelva la red.');
     }
   }, []);
 
-  return { entries, loading, error, saveEntry, deleteEntry, backend };
+  return {
+    entries,
+    loading,
+    error,
+    saveEntry,
+    deleteEntry,
+    backend,
+    online,
+    pendingCount,
+  };
 }
