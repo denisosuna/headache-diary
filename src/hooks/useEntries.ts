@@ -1,39 +1,55 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { HeadacheEntry } from '../types';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { enqueue, flushQueue, getPendingCount } from '../lib/syncQueue';
+import { groupByDate, newId } from '../utils/entries';
 
 const STORAGE_KEY = 'diario-cefaleas:entries';
 const TABLE = 'headache_entries';
 
-function readLocal(): Record<string, HeadacheEntry> {
+/**
+ * Lee el mirror local soportando dos formatos:
+ *   - Antiguo: { 'YYYY-MM-DD': { date, intensidad, ... } }   (1 entrada por día, sin id)
+ *   - Nuevo:  HeadacheEntry[]                                 (varias entradas por día, con id)
+ * Si encuentra el formato antiguo, lo migra in-place.
+ */
+function readLocal(): HeadacheEntry[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return {};
-    return JSON.parse(raw) as Record<string, HeadacheEntry>;
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return parsed as HeadacheEntry[];
+    }
+    // Migrar formato antiguo Record<date, entry>
+    const migrated: HeadacheEntry[] = Object.values(parsed as Record<string, Omit<HeadacheEntry, 'id'>>).map(
+      (e) => ({ id: newId(), ...e })
+    );
+    writeLocal(migrated);
+    return migrated;
   } catch {
-    return {};
+    return [];
   }
 }
 
-function writeLocal(entries: Record<string, HeadacheEntry>): void {
+function writeLocal(entries: HeadacheEntry[]): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
 }
 
 export interface UseEntries {
-  entries: Record<string, HeadacheEntry>;
+  entries: HeadacheEntry[];
+  entriesByDate: Record<string, HeadacheEntry[]>;
   loading: boolean;
   error: string | null;
   saveEntry: (entry: HeadacheEntry) => Promise<void>;
-  deleteEntry: (date: string) => Promise<void>;
+  deleteEntry: (id: string) => Promise<void>;
   backend: 'supabase' | 'localStorage';
   online: boolean;
   pendingCount: number;
 }
 
 export function useEntries(): UseEntries {
-  // Mirror local: render inmediato y soporte offline incluso con Supabase activo.
-  const [entries, setEntries] = useState<Record<string, HeadacheEntry>>(() => readLocal());
+  const [entries, setEntries] = useState<HeadacheEntry[]>(() => readLocal());
   const [loading, setLoading] = useState(isSupabaseConfigured);
   const [error, setError] = useState<string | null>(null);
   const [online, setOnline] = useState(
@@ -45,7 +61,7 @@ export function useEntries(): UseEntries {
     ? 'supabase'
     : 'localStorage';
 
-  // Persiste el mirror cada vez que cambien las entradas.
+  // Persistir mirror local en cada cambio.
   useEffect(() => {
     writeLocal(entries);
   }, [entries]);
@@ -60,18 +76,17 @@ export function useEntries(): UseEntries {
         .select('*')
         .order('date', { ascending: false });
       if (err) throw err;
-      const map: Record<string, HeadacheEntry> = {};
-      for (const row of data ?? []) {
-        map[row.date] = {
-          date: row.date,
-          intensidad: row.intensidad,
-          tipo: row.tipo,
-          zona: row.zona,
-          desencadenantes: row.desencadenantes ?? [],
-          notas: row.notas ?? '',
-        };
-      }
-      setEntries(map);
+      const rows: HeadacheEntry[] = (data ?? []).map((row) => ({
+        id: row.id ?? newId(),
+        date: row.date,
+        hora: row.hora ?? undefined,
+        intensidad: row.intensidad,
+        tipo: row.tipo,
+        zona: row.zona,
+        desencadenantes: row.desencadenantes ?? [],
+        notas: row.notas ?? '',
+      }));
+      setEntries(rows);
       setError(null);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Error desconocido';
@@ -79,7 +94,7 @@ export function useEntries(): UseEntries {
     }
   }, []);
 
-  // Carga inicial: si hay Supabase, intenta sincronizar; si no, ya tenemos local.
+  // Carga inicial.
   useEffect(() => {
     if (!supabase) {
       setLoading(false);
@@ -89,7 +104,7 @@ export function useEntries(): UseEntries {
     syncWithServer().finally(() => setLoading(false));
   }, [syncWithServer]);
 
-  // Online/offline + focus → reintenta sincronización.
+  // Online / offline / focus.
   useEffect(() => {
     function handleOnline() {
       setOnline(true);
@@ -114,7 +129,13 @@ export function useEntries(): UseEntries {
 
   const saveEntry = useCallback(async (entry: HeadacheEntry) => {
     setError(null);
-    setEntries((prev) => ({ ...prev, [entry.date]: entry }));
+    setEntries((prev) => {
+      const idx = prev.findIndex((e) => e.id === entry.id);
+      if (idx === -1) return [...prev, entry];
+      const next = prev.slice();
+      next[idx] = entry;
+      return next;
+    });
     if (!supabase) return;
     enqueue({ kind: 'upsert', entry });
     const remaining = await flushQueue();
@@ -124,15 +145,11 @@ export function useEntries(): UseEntries {
     }
   }, []);
 
-  const deleteEntry = useCallback(async (date: string) => {
+  const deleteEntry = useCallback(async (id: string) => {
     setError(null);
-    setEntries((prev) => {
-      const next = { ...prev };
-      delete next[date];
-      return next;
-    });
+    setEntries((prev) => prev.filter((e) => e.id !== id));
     if (!supabase) return;
-    enqueue({ kind: 'delete', date });
+    enqueue({ kind: 'delete', id });
     const remaining = await flushQueue();
     setPendingCount(remaining);
     if (remaining > 0) {
@@ -140,8 +157,11 @@ export function useEntries(): UseEntries {
     }
   }, []);
 
+  const entriesByDate = useMemo(() => groupByDate(entries), [entries]);
+
   return {
     entries,
+    entriesByDate,
     loading,
     error,
     saveEntry,

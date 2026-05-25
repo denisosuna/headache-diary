@@ -9,13 +9,17 @@ function escape(value: string): string {
 }
 
 export function entriesToCSV(entries: HeadacheEntry[]): string {
-  const header = ['Fecha', 'Intensidad', 'Tipo', 'Zona', 'Desencadenantes', 'Notas'];
+  const header = ['Fecha', 'Hora', 'Intensidad', 'Tipo', 'Zona', 'Desencadenantes', 'Notas'];
   const rows = entries
     .slice()
-    .sort((a, b) => a.date.localeCompare(b.date))
+    .sort((a, b) => {
+      if (a.date !== b.date) return a.date.localeCompare(b.date);
+      return (a.hora ?? '').localeCompare(b.hora ?? '');
+    })
     .map((e) =>
       [
         e.date,
+        e.hora ?? '',
         INTENSIDAD_META[e.intensidad].label,
         e.tipo,
         e.zona,

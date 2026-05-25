@@ -4,7 +4,7 @@ import { formatLargo } from '../utils/date';
 
 interface Props {
   entries: HeadacheEntry[];
-  onSelect: (date: string) => void;
+  onSelect: (entry: HeadacheEntry) => void;
 }
 
 export function EntryList({ entries, onSelect }: Props) {
@@ -25,10 +25,10 @@ export function EntryList({ entries, onSelect }: Props) {
         {entries.map((e) => {
           const meta = INTENSIDAD_META[e.intensidad];
           return (
-            <li key={e.date}>
+            <li key={e.id}>
               <button
                 type="button"
-                onClick={() => onSelect(e.date)}
+                onClick={() => onSelect(e)}
                 className="w-full rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
               >
                 <div className="flex flex-wrap items-center gap-2">
@@ -41,6 +41,9 @@ export function EntryList({ entries, onSelect }: Props) {
                   <span className="text-sm font-medium text-slate-900">
                     {formatLargo(e.date)}
                   </span>
+                  {e.hora && (
+                    <span className="font-mono text-xs text-slate-500">· {e.hora}</span>
+                  )}
                   <span className="text-xs text-slate-500">·</span>
                   <span className="text-xs text-slate-600">{e.tipo}</span>
                   <span className="text-xs text-slate-500">·</span>

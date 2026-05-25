@@ -1,20 +1,38 @@
 import { useMemo, useState } from 'react';
 import { Calendar } from './components/Calendar';
+import { DaySheet } from './components/DaySheet';
 import { EntryList } from './components/EntryList';
 import { EntryModal } from './components/EntryModal';
 import { UpdateBanner } from './components/UpdateBanner';
 import { useEntries } from './hooks/useEntries';
+import type { HeadacheEntry } from './types';
 import { downloadCSV, entriesToCSV } from './utils/csv';
 import { MESES, parseISODate } from './utils/date';
+import { compareEntriesDesc } from './utils/entries';
+
+interface EditTarget {
+  date: string;
+  entry?: HeadacheEntry;
+}
 
 export default function App() {
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
-  const [month, setMonth] = useState(today.getMonth()); // 0-11
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [month, setMonth] = useState(today.getMonth());
+  const [daySheetDate, setDaySheetDate] = useState<string | null>(null);
+  const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
 
-  const { entries, loading, error, saveEntry, deleteEntry, backend, online, pendingCount } =
-    useEntries();
+  const {
+    entries,
+    entriesByDate,
+    loading,
+    error,
+    saveEntry,
+    deleteEntry,
+    backend,
+    online,
+    pendingCount,
+  } = useEntries();
 
   function shiftMonth(delta: number) {
     const d = new Date(year, month + delta, 1);
@@ -28,22 +46,30 @@ export default function App() {
     setMonth(n.getMonth());
   }
 
+  function handleSelectDate(iso: string) {
+    const dayEntries = entriesByDate[iso] ?? [];
+    if (dayEntries.length === 0) {
+      setEditTarget({ date: iso });
+    } else {
+      setDaySheetDate(iso);
+    }
+  }
+
   const monthEntries = useMemo(() => {
-    return Object.values(entries)
+    return entries
       .filter((e) => {
         const d = parseISODate(e.date);
         return d.getFullYear() === year && d.getMonth() === month;
       })
-      .sort((a, b) => b.date.localeCompare(a.date));
+      .sort(compareEntriesDesc);
   }, [entries, year, month]);
 
   function handleExport() {
-    const all = Object.values(entries);
-    if (all.length === 0) {
+    if (entries.length === 0) {
       alert('No hay entradas para exportar.');
       return;
     }
-    const csv = entriesToCSV(all);
+    const csv = entriesToCSV(entries);
     downloadCSV(`diario-cefaleas-${new Date().toISOString().slice(0, 10)}.csv`, csv);
   }
 
@@ -77,17 +103,20 @@ export default function App() {
         <Calendar
           year={year}
           month={month}
-          entries={entries}
+          entriesByDate={entriesByDate}
           onPrev={() => shiftMonth(-1)}
           onNext={() => shiftMonth(1)}
           onToday={goToday}
-          onSelectDate={(iso) => setSelectedDate(iso)}
+          onSelectDate={handleSelectDate}
         />
 
         {loading ? (
           <p className="text-sm text-slate-500">Cargando entradas…</p>
         ) : (
-          <EntryList entries={monthEntries} onSelect={(iso) => setSelectedDate(iso)} />
+          <EntryList
+            entries={monthEntries}
+            onSelect={(entry) => setEditTarget({ date: entry.date, entry })}
+          />
         )}
 
         <footer className="pt-4 text-center text-xs text-slate-400">
@@ -114,11 +143,21 @@ export default function App() {
         </footer>
       </main>
 
-      {selectedDate && (
+      {daySheetDate && !editTarget && (
+        <DaySheet
+          date={daySheetDate}
+          entries={entriesByDate[daySheetDate] ?? []}
+          onClose={() => setDaySheetDate(null)}
+          onAdd={() => setEditTarget({ date: daySheetDate })}
+          onEdit={(entry) => setEditTarget({ date: entry.date, entry })}
+        />
+      )}
+
+      {editTarget && (
         <EntryModal
-          date={selectedDate}
-          existing={entries[selectedDate]}
-          onClose={() => setSelectedDate(null)}
+          date={editTarget.date}
+          existing={editTarget.entry}
+          onClose={() => setEditTarget(null)}
           onSave={saveEntry}
           onDelete={deleteEntry}
         />

@@ -5,14 +5,22 @@ import { DayCell } from './DayCell';
 interface Props {
   year: number;
   month: number; // 0-11
-  entries: Record<string, HeadacheEntry>;
+  entriesByDate: Record<string, HeadacheEntry[]>;
   onPrev: () => void;
   onNext: () => void;
   onToday: () => void;
   onSelectDate: (iso: string) => void;
 }
 
-export function Calendar({ year, month, entries, onPrev, onNext, onToday, onSelectDate }: Props) {
+export function Calendar({
+  year,
+  month,
+  entriesByDate,
+  onPrev,
+  onNext,
+  onToday,
+  onSelectDate,
+}: Props) {
   const days = buildMonthMatrix(year, month);
   const today = new Date();
 
@@ -64,7 +72,7 @@ export function Calendar({ year, month, entries, onPrev, onNext, onToday, onSele
               date={d}
               inCurrentMonth={d.getMonth() === month}
               isToday={isSameDay(d, today)}
-              entry={entries[iso]}
+              entries={entriesByDate[iso] ?? []}
               onClick={() => onSelectDate(iso)}
             />
           );

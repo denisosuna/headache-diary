@@ -1,16 +1,19 @@
 import type { HeadacheEntry } from '../types';
 import { INTENSIDAD_META } from '../types';
+import { maxIntensidad } from '../utils/entries';
 
 interface Props {
   date: Date;
   inCurrentMonth: boolean;
   isToday: boolean;
-  entry?: HeadacheEntry;
+  entries: HeadacheEntry[];
   onClick: () => void;
 }
 
-export function DayCell({ date, inCurrentMonth, isToday, entry, onClick }: Props) {
-  const meta = entry ? INTENSIDAD_META[entry.intensidad] : null;
+export function DayCell({ date, inCurrentMonth, isToday, entries, onClick }: Props) {
+  const max = maxIntensidad(entries);
+  const meta = max ? INTENSIDAD_META[max] : null;
+  const count = entries.length;
 
   return (
     <button
@@ -22,7 +25,7 @@ export function DayCell({ date, inCurrentMonth, isToday, entry, onClick }: Props
         inCurrentMonth ? 'border-slate-200 bg-white' : 'border-transparent bg-slate-50/50 text-slate-400',
         isToday ? 'ring-2 ring-slate-900 ring-offset-1' : '',
       ].join(' ')}
-      aria-label={`Día ${date.getDate()}${entry ? `, intensidad ${entry.intensidad}` : ''}`}
+      aria-label={`Día ${date.getDate()}${count ? `, ${count} entrada${count === 1 ? '' : 's'}` : ''}`}
     >
       <span
         className={[
@@ -33,10 +36,17 @@ export function DayCell({ date, inCurrentMonth, isToday, entry, onClick }: Props
         {date.getDate()}
       </span>
       {meta && (
-        <span
-          className={`mt-auto inline-block h-2.5 w-2.5 rounded-full ${meta.dot}`}
-          title={meta.label}
-        />
+        <span className="mt-auto flex items-center gap-1">
+          <span
+            className={`inline-block h-2.5 w-2.5 rounded-full ${meta.dot}`}
+            title={meta.label}
+          />
+          {count > 1 && (
+            <span className="rounded-full bg-slate-900 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">
+              {count}
+            </span>
+          )}
+        </span>
       )}
     </button>
   );

@@ -57,8 +57,12 @@ export const DESENCADENANTES = [
 export type Desencadenante = (typeof DESENCADENANTES)[number];
 
 export interface HeadacheEntry {
+  /** UUID único de la entrada */
+  id: string;
   /** YYYY-MM-DD */
   date: string;
+  /** HH:mm (24h), opcional */
+  hora?: string;
   intensidad: Intensidad;
   tipo: TipoDolor;
   zona: Zona;

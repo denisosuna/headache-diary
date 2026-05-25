@@ -15,16 +15,17 @@ import {
   ZONAS_DESC,
 } from '../types';
 import { formatLargo } from '../utils/date';
+import { newId } from '../utils/entries';
 
 interface Props {
   date: string;
   existing?: HeadacheEntry;
   onClose: () => void;
   onSave: (entry: HeadacheEntry) => Promise<void> | void;
-  onDelete: (date: string) => Promise<void> | void;
+  onDelete: (id: string) => Promise<void> | void;
 }
 
-const DEFAULT: Omit<HeadacheEntry, 'date'> = {
+const DEFAULT: Omit<HeadacheEntry, 'id' | 'date'> = {
   intensidad: 'moderado',
   tipo: 'Tensional',
   zona: 'Frente',
@@ -42,6 +43,7 @@ export function EntryModal({ date, existing, onClose, onSave, onDelete }: Props)
     existing?.desencadenantes ?? []
   );
   const [notas, setNotas] = useState(existing?.notas ?? '');
+  const [hora, setHora] = useState<string>(existing?.hora ?? '');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -61,7 +63,16 @@ export function EntryModal({ date, existing, onClose, onSave, onDelete }: Props)
   async function handleSave() {
     setSaving(true);
     try {
-      await onSave({ date, intensidad, tipo, zona, desencadenantes, notas });
+      await onSave({
+        id: existing?.id ?? newId(),
+        date,
+        hora: hora || undefined,
+        intensidad,
+        tipo,
+        zona,
+        desencadenantes,
+        notas,
+      });
       onClose();
     } finally {
       setSaving(false);
@@ -73,7 +84,7 @@ export function EntryModal({ date, existing, onClose, onSave, onDelete }: Props)
     if (!confirm('¿Eliminar esta entrada?')) return;
     setSaving(true);
     try {
-      await onDelete(date);
+      await onDelete(existing.id);
       onClose();
     } finally {
       setSaving(false);
@@ -93,7 +104,9 @@ export function EntryModal({ date, existing, onClose, onSave, onDelete }: Props)
       >
         <header className="flex items-start justify-between border-b border-slate-100 px-5 py-4">
           <div>
-            <p className="text-xs uppercase tracking-wide text-slate-500">Entrada</p>
+            <p className="text-xs uppercase tracking-wide text-slate-500">
+              {existing ? 'Editar entrada' : 'Nueva entrada'}
+            </p>
             <h3 className="text-base font-semibold text-slate-900">{formatLargo(date)}</h3>
           </div>
           <button
@@ -131,6 +144,15 @@ export function EntryModal({ date, existing, onClose, onSave, onDelete }: Props)
                 );
               })}
             </div>
+          </Field>
+
+          <Field label="Hora (opcional)">
+            <input
+              type="time"
+              value={hora}
+              onChange={(e) => setHora(e.target.value)}
+              className="block w-full min-h-[44px] rounded-lg border border-slate-200 bg-white px-3 text-base sm:text-sm text-slate-900 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-400"
+            />
           </Field>
 
           <Field label="Tipo de dolor" hint={TIPOS_DOLOR_DESC[tipo]}>
