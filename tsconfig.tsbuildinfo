@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/vite-env.d.ts","./src/components/calendar.tsx","./src/components/daycell.tsx","./src/components/entrylist.tsx","./src/components/entrymodal.tsx","./src/hooks/useentries.ts","./src/lib/supabase.ts","./src/types/index.ts","./src/utils/csv.ts","./src/utils/date.ts"],"version":"5.9.3"}
