@@ -2,31 +2,16 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { HeadacheEntry } from '../types';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { enqueue, flushQueue, getPendingCount } from '../lib/syncQueue';
-import { groupByDate, newId } from '../utils/entries';
+import { groupByDate } from '../utils/entries';
 
 const STORAGE_KEY = 'diario-cefaleas:entries';
 const TABLE = 'headache_entries';
 
-/**
- * Lee el mirror local soportando dos formatos:
- *   - Antiguo: { 'YYYY-MM-DD': { date, intensidad, ... } }   (1 entrada por día, sin id)
- *   - Nuevo:  HeadacheEntry[]                                 (varias entradas por día, con id)
- * Si encuentra el formato antiguo, lo migra in-place.
- */
 function readLocal(): HeadacheEntry[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      return parsed as HeadacheEntry[];
-    }
-    // Migrar formato antiguo Record<date, entry>
-    const migrated: HeadacheEntry[] = Object.values(parsed as Record<string, Omit<HeadacheEntry, 'id'>>).map(
-      (e) => ({ id: newId(), ...e })
-    );
-    writeLocal(migrated);
-    return migrated;
+    return JSON.parse(raw) as HeadacheEntry[];
   } catch {
     return [];
   }
@@ -77,7 +62,7 @@ export function useEntries(): UseEntries {
         .order('date', { ascending: false });
       if (err) throw err;
       const rows: HeadacheEntry[] = (data ?? []).map((row) => ({
-        id: row.id ?? newId(),
+        id: row.id,
         date: row.date,
         hora: row.hora ?? undefined,
         intensidad: row.intensidad,
